@@ -1,0 +1,81 @@
+version: "3.9"
+
+services:
+    app:
+        container_name: cart-event-sourcing.app
+        build:
+            context: .
+            dockerfile: .docker/php/Dockerfile
+        volumes:
+            - ./:/app
+            - .docker/php/php.ini-development:/opt/bitnami/php/etc/conf.d/php.ini
+        networks:
+            - cart-event-sourcing
+    queue:
+        container_name: cart-event-sourcing.queue
+        build:
+            context: .
+            dockerfile: .docker/queue/Dockerfile
+        command: php /app/artisan queue:listen --queue=high,default --verbose --tries=3 --timeout=0
+        entrypoint:
+            - docker-php-entrypoint
+        env_file: .env
+        environment:
+            - LOG_CHANNEL=single
+        volumes:
+            - ./:/app
+            - .docker/php/php.ini-development:/opt/bitnami/php/etc/conf.d/php.ini
+        networks:
+            - cart-event-sourcing
+    cron:
+        container_name: cart-event-sourcing.cron
+        build:
+            context: .
+            dockerfile: .docker/cron/Dockerfile
+        env_file: .env
+        environment:
+            - LOG_CHANNEL=single
+        volumes:
+            - ./:/app
+            - .docker/php/php.ini-development:/opt/bitnami/php/etc/conf.d/php.ini
+        networks:
+            - cart-event-sourcing
+    nginx:
+        container_name: cart-event-sourcing.nginx
+        build:
+            context: .
+            dockerfile: .docker/nginx/Dockerfile
+        depends_on:
+            - app
+        ports:
+            - "8280:80"
+        volumes:
+            - ./public:/app/public
+        networks:
+            - cart-event-sourcing
+    mysql:
+        container_name: cart-event-sourcing.mysql
+        image: mariadb:10.5.8
+        command: mysqld --sql_mode="" --innodb_use_native_aio=0
+        environment:
+            - MYSQL_USER=cart-event-sourcing
+            - MYSQL_PASSWORD=secret
+            - MYSQL_ROOT_PASSWORD=secret
+            - MYSQL_DATABASE=cart-event-sourcing
+        volumes:
+            - cart-event-sourcing-db-data:/var/lib/mysql
+        ports:
+            - "33062:3306"
+        networks:
+            - cart-event-sourcing
+    redis:
+        container_name: cart-event-sourcing.redis
+        image: bitnami/redis
+        environment:
+            - ALLOW_EMPTY_PASSWORD=yes
+        networks:
+            - cart-event-sourcing
+volumes:
+    cart-event-sourcing-db-data:
+networks:
+    cart-event-sourcing:
